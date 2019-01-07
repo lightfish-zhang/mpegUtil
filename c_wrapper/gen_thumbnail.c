@@ -105,7 +105,7 @@ static int open_codec_context(int *stream_idx,
     return 0;
 }
 /* 
-给视频生成缩略图
+给图片生成缩略图
  */
 int gen_thumbnail(const char* formatname, const int width, void* data, int data_size, void* outbuff, int outbufflen, int *outsz)
 {
@@ -152,7 +152,7 @@ int gen_thumbnail(const char* formatname, const int width, void* data, int data_
         goto clean2;
     }
 
-    // 获得解码器
+    // 获得解码器，找到视频流的索引
     if (open_codec_context(&video_stream_idx, &video_dec_ctx, fmt_ctx, AVMEDIA_TYPE_VIDEO) < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could not open codec context\n");
         goto clean3;
@@ -170,10 +170,16 @@ int gen_thumbnail(const char* formatname, const int width, void* data, int data_
         goto clean4;
     }
 
-    // 读取视频文件流，获得下一帧数据（一个原始的压缩数据包 packet）
+    // 读取音视频文件流，获得下一帧数据的（一个原始的压缩数据包 packet）
     // get the next frame of a stream.
     while (av_read_frame(fmt_ctx, pkt) >= 0) {
         if (pkt->size) {
+            // 由于音视频文件是按时序来排列音频帧或者视频帧，此时读取的帧有可能是音频的，与当前逻辑所需的视频帧要求不符，需要过滤
+            // 若不过滤，会出现将音频流当做图片的 bug
+            if (video_stream_idx != pkt->stream_index) {
+                av_packet_unref(pkt);
+                continue;
+            }
             ret = decode(&mctx, formatname, width, video_dec_ctx, frame, pkt);
             av_frame_unref(frame);
             av_packet_unref(pkt);
@@ -181,8 +187,8 @@ int gen_thumbnail(const char* formatname, const int width, void* data, int data_
                 av_log(NULL, AV_LOG_ERROR, "Error while decoding,err:%d\n", ret);
                 goto clean5;
             }
-            // 若编码成功，跳转到清理工作
-            if (ret == 0) {
+            // 成功解码一帧，跳出
+            if (video_dec_ctx->frame_number == 1) {
                 goto clean5;
             }
         }
