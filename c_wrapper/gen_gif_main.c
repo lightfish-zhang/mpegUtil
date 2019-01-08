@@ -8,7 +8,7 @@
 #include "gen_gif.h"
 #include "log.h"
 
-#define INBUF_SIZE 1024*1024*10
+#define INBUF_SIZE (10<<20)
 
 void Ffmpeglog(int l, char* t) {
     if (l <= 32) {
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 
 
     /* read raw data from the input file */
-    data_size = fread(data, 1, INBUF_SIZE, f);
+    data_size = fread(data, 1, INBUF_SIZE, f); // read 1 byte every time, ret = how many time, INBUF_SIZE = max time
     if (!data_size)
         exit(1);
 
