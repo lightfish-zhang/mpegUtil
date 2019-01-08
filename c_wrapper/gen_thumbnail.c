@@ -105,7 +105,8 @@ static int open_codec_context(int *stream_idx,
     return 0;
 }
 /* 
-给图片生成缩略图
+生成缩略图
+对ffmpeg支持的视频或图片格式的文件
  */
 int gen_thumbnail(const char* formatname, const int width, void* data, int data_size, void* outbuff, int outbufflen, int *outsz)
 {
@@ -152,7 +153,7 @@ int gen_thumbnail(const char* formatname, const int width, void* data, int data_
         goto clean2;
     }
 
-    // 获得解码器，找到视频流的索引
+    // 找到第一个视频流的索引，获得解码器ID
     if (open_codec_context(&video_stream_idx, &video_dec_ctx, fmt_ctx, AVMEDIA_TYPE_VIDEO) < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could not open codec context\n");
         goto clean3;
