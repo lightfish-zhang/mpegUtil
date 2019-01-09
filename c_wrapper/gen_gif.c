@@ -8,12 +8,13 @@
 #include "muxing.h"
 #include "filtering_video.h"
 
-static const int k_gif_framerate = 5;
+static const int k_gif_framerate = 5; // 默认 gif 的帧率为 5，即每秒 5 帧
 
 static int decode(void** mctx, void** fctx, const int rotate, const char* outfilename, const int skip_step, AVCodecContext *dec_ctx, AVFrame *frame, AVFrame *filt_frame, AVPacket *pkt)
 {
     int ret;
 
+    // 向解码器发送原始压缩数据 packet
     ret = avcodec_send_packet(dec_ctx, pkt);
     if (ret < 0) {
         av_log(NULL, AV_LOG_ERROR, "Error sending a packet for decoding, outfilename:%s, ret:%d\n", outfilename, ret);
@@ -21,6 +22,7 @@ static int decode(void** mctx, void** fctx, const int rotate, const char* outfil
     }
 
     while (ret >= 0) {
+        // 从解码器转码出 frame 视频帧
         ret = avcodec_receive_frame(dec_ctx, frame);
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
             ret = 1;
@@ -63,9 +65,9 @@ static int decode(void** mctx, void** fctx, const int rotate, const char* outfil
     return ret;
 }
 
-static int open_codec_context(AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx, enum AVMediaType type)
+static int open_codec_context(AVCodecContext **dec_ctx, int *stream_index, AVFormatContext *fmt_ctx, enum AVMediaType type)
 {
-    int ret, stream_index; // 整型的返回值、流索引
+    int ret; // 整型的返回值、流索引
     AVStream *st; // AV 流的指针
     AVCodec *dec = NULL; // AV 解码器的指针
 
@@ -76,8 +78,8 @@ static int open_codec_context(AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx
                 av_get_media_type_string(type));
         return ret;
     } else {
-        stream_index = ret;
-        st = fmt_ctx->streams[stream_index];
+        *stream_index = ret;
+        st = fmt_ctx->streams[*stream_index];
 
         /* 获得该 stream 类型对应的解码器的句柄 */
         dec = avcodec_find_decoder(st->codecpar->codec_id);
@@ -108,38 +110,39 @@ static int open_codec_context(AVCodecContext **dec_ctx, AVFormatContext *fmt_ctx
                     av_get_media_type_string(type));
             return ret;
         }
+
+        // 获取帧率
+        (*dec_ctx)->framerate = av_guess_frame_rate(fmt_ctx, st, NULL);
+        av_log(NULL, AV_LOG_INFO, "framerate num=%d den=%d", (*dec_ctx)->framerate.num , (*dec_ctx)->framerate.den);
     }
 
     return 0;
 }
 
-int gen_gif(const char* filename, const int src_framerate, const int rotate, void* data, int data_size)
+int gen_gif(const char* filename, const int rotate, void* data, int data_size)
 {
-    const AVCodec *codec = NULL;
+    const AVCodec *codec = NULL; // AV 解码器指针
     AVFormatContext *fmt_ctx = NULL; // AV 格式上下文
-    // AVCodecParserContext *parser = NULL;
-    AVCodecContext *c = NULL;
-    AVFrame *frame = NULL;
-    AVFrame *filt_frame = NULL;
+    AVCodecContext *c = NULL; // 解码器上下文
+    AVFrame *frame = NULL; // 输入文件的帧，缓存用
+    AVFrame *filt_frame = NULL; // 
     int ret = -1, video_stream_idx = -1;
     AVPacket *pkt = NULL;
     void* mctx = NULL;
     void* fctx = NULL;
     unsigned char *indata = NULL; // avcodec 的输入的指针
-    int *stream_mapping = NULL;
-    int stream_mapping_size = 0;
-    int stream_index = 0;
+    int video_stream_index = 0;
 
     // 分配相关的内存
     fmt_ctx = avformat_alloc_context();
     if (NULL == fmt_ctx) {
         av_log(NULL, AV_LOG_ERROR, "Could not alloc format context\n");
-        goto clean0;
+        goto clean1;
     }
     indata = (unsigned char *)av_malloc(data_size); // ffmpeg 分配内存的方法
     if (NULL == indata) {
         av_log(NULL, AV_LOG_ERROR, "Could not alloc indata\n");
-        goto clean0;
+        goto clean1;
     }
     memcpy(indata, data, data_size); // 复制待处理的文件数据
 
@@ -148,52 +151,30 @@ int gen_gif(const char* filename, const int src_framerate, const int rotate, voi
     if (NULL == fmt_ctx->pb) {
         av_log(NULL, AV_LOG_ERROR, "Could not alloc io context\n");
         av_free(indata);
-        goto clean0;
+        goto clean1;
     }
 
     // 打开输入的数据流，读取 header 的格式内容，注意必须的后续处理 avformat_close_input()
     if (avformat_open_input(&fmt_ctx, NULL, NULL, NULL) < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could not open input data\n");
-        goto clean0;
+        goto clean1;
     }
 
     /* retrieve stream information */
     // 为了防止某些文件格式没有 header，于是从数据流中读取文件格式
     if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could not find stream information\n");
-        goto clean0;
+        goto clean1;
     }
 
     // 找到第一个视频流的索引，获得解码器ID
-    if (open_codec_context(&c, fmt_ctx, AVMEDIA_TYPE_VIDEO) < 0) {
+    if (open_codec_context(&c, &video_stream_index, fmt_ctx, AVMEDIA_TYPE_VIDEO) < 0) {
         av_log(NULL, AV_LOG_ERROR, "Could not open codec context\n");
-        goto clean0;
-    }
-
-
-    av_log(NULL, AV_LOG_INFO, "fmt_ctx->nb_streams=%d", fmt_ctx->nb_streams);
-    // find video stream
-    stream_mapping_size = fmt_ctx->nb_streams;
-    stream_mapping = av_mallocz_array(stream_mapping_size, sizeof(*stream_mapping));
-    if (!stream_mapping) {
-        ret = AVERROR(ENOMEM);
         goto clean1;
     }
-    for (int i = 0; i < fmt_ctx->nb_streams; i++) {
-        AVStream *out_stream;
-        AVStream *in_stream = fmt_ctx->streams[i];
-        AVCodecParameters *in_codecpar = in_stream->codecpar;
-        if (in_codecpar->codec_type != AVMEDIA_TYPE_VIDEO) {
-            stream_mapping[i] = -1;
-            continue;
-        }
-        av_log(NULL, AV_LOG_INFO, "set stream_mapping %d:%d", i, stream_index);
-        stream_mapping[i] = stream_index++;
-    }
 
-
-    c->framerate.num = src_framerate;
-    c->framerate.den = 1;
+    // 视频与gif的帧率比，计算转码时跳过帧的间隔数
+    // note: num 分子， den 分母
     int skip_step = c->framerate.num / c->framerate.den / k_gif_framerate;
     if (skip_step == 0)
         skip_step = 1;
@@ -218,11 +199,13 @@ int gen_gif(const char* filename, const int src_framerate, const int rotate, voi
 
     while (av_read_frame(fmt_ctx, pkt) >= 0) {
         if (pkt->size) {
-            av_log(NULL, AV_LOG_INFO, "read frame stream index=%d, map=%d", pkt->stream_index, stream_mapping[pkt->stream_index]);
-            if(stream_mapping[pkt->stream_index]<0){
+            // av_log(NULL, AV_LOG_DEBUG, "read frame stream index=%d", pkt->stream_index);
+            // 不同 stream_id 的packet是交错的，在时序上，多路复用
+            if(pkt->stream_index != video_stream_index){
                 av_packet_unref(pkt);
                 continue;
             }
+
             ret = decode(&mctx, &fctx, rotate, filename, skip_step, c, frame, filt_frame, pkt);
             av_frame_unref(frame);
             av_frame_unref(filt_frame);
@@ -246,10 +229,8 @@ clean4:
 clean3:
     av_packet_free(&pkt);
 clean2:
-    av_freep(&stream_mapping);
-clean1:
     avcodec_free_context(&c);
-clean0:
+clean1:
     if(NULL != fmt_ctx->pb->buffer)
         av_freep(&fmt_ctx->pb->buffer);
     if(NULL != fmt_ctx->pb)
