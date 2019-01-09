@@ -360,6 +360,11 @@ void* muxing_begin(const char* formatname, const char* filename, const int dst_f
         goto clean3;
     }
 
+    /*
+    当设置了AVFMT_NOFILE标志，
+        AVOutputFormat 将不会携带 AVIOContext
+        解复用器将调用avio_open函数打开一个调用者提供的未打开的文件
+    */
     mctx->fmt = mctx->oc->oformat;
     if (NULL == filename) {
         mctx->fmt->flags = mctx->fmt->flags & ~AVFMT_NOFILE; // 先 not运算 取反标志位，再与运算，使 flag 的 AVFMT_NOFILE标志位 置零

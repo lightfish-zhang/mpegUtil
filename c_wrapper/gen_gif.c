@@ -38,6 +38,7 @@ static int decode(void** mctx, void** fctx, const int rotate,
             av_log(NULL, AV_LOG_ERROR, "Error during decoding, outfilename:%s, ret:%d\n", outfilename, ret);
             break;
         }
+        
         // PTS（显示时间戳）, 计算一帧在整个视频的时间位置：timestamp(秒) = pts * av_q2d(st->time_base)
         frame->pts = dec_ctx->frame_number;
         av_log(NULL, AV_LOG_INFO, "[decode] frame_number=%d, timestamp=%f", 
@@ -48,8 +49,8 @@ static int decode(void** mctx, void** fctx, const int rotate,
                 char filters_descr[64];
                 /*
                 filter
-                格式：http://ffmpeg.org/ffmpeg-filters.html#frei0r-1
-                参数列表：https://www.mltframework.org/plugins/PluginsFilters/
+                    格式：http://ffmpeg.org/ffmpeg-filters.html#frei0r-1
+                    参数列表：https://www.mltframework.org/plugins/PluginsFilters/
                 */
                 snprintf(filters_descr, sizeof(filters_descr), "rotate='%d*PI/180:ow=rotw(%d*PI/180):oh=roth(%d*PI/180)'", rotate, rotate, rotate);
                 av_log(NULL, AV_LOG_INFO, "%s filters_descr:%s\n", outfilename, filters_descr);
