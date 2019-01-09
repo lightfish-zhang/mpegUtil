@@ -24,7 +24,6 @@ int main(int argc, char **argv)
     size_t   data_size;
 
     set_log_callback();
-    av_log_set_level(AV_LOG_DEBUG);
 
     if (argc <= 2) {
         fprintf(stderr, "Usage: %s <input file> <output file>\n", argv[0]);
@@ -48,7 +47,7 @@ int main(int argc, char **argv)
     if (!data_size)
         exit(1);
 
-    gen_gif(outfilename, 0, data, data_size);
+    gen_gif(outfilename, 45, data, data_size);
 
     free(data);
     fclose(f);

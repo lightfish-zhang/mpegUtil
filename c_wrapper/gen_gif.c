@@ -10,7 +10,9 @@
 
 static const int k_gif_framerate = 5; // 默认 gif 的帧率为 5，即每秒 5 帧
 
-static int decode(void** mctx, void** fctx, const int rotate, const char* outfilename, const int skip_step, AVCodecContext *dec_ctx, AVFrame *frame, AVFrame *filt_frame, AVPacket *pkt)
+static int decode(void** mctx, void** fctx, const int rotate, 
+                    const char* outfilename, const int skip_step, AVCodecContext *dec_ctx, 
+                    AVFrame *frame, AVFrame *filt_frame, AVPacket *pkt, AVStream *st)
 {
     int ret;
 
@@ -25,18 +27,30 @@ static int decode(void** mctx, void** fctx, const int rotate, const char* outfil
         // 从解码器转码出 frame 视频帧
         ret = avcodec_receive_frame(dec_ctx, frame);
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            av_log(NULL, AV_LOG_INFO, "[decode] avcodec_receive_frame ret=%d", ret);
+            /*
+            返回 EAGAIN 表示需要更多帧来参与编码
+            像 MPEG等格式, P帧(预测帧)需要依赖I帧(关键帧)或者前面的P帧，使用比较或者差分方式编码
+            */ 
             ret = 1;
             break;
         } else if (ret < 0) {
             av_log(NULL, AV_LOG_ERROR, "Error during decoding, outfilename:%s, ret:%d\n", outfilename, ret);
             break;
         }
-
+        // PTS（显示时间戳）, 计算一帧在整个视频的时间位置：timestamp(秒) = pts * av_q2d(st->time_base)
         frame->pts = dec_ctx->frame_number;
+        av_log(NULL, AV_LOG_INFO, "[decode] frame_number=%d, timestamp=%f", 
+                dec_ctx->frame_number, frame->pts * av_q2d(st->time_base));
 
         if (dec_ctx->frame_number == 1) {
             if (rotate != 0) {
                 char filters_descr[64];
+                /*
+                filter
+                格式：http://ffmpeg.org/ffmpeg-filters.html#frei0r-1
+                参数列表：https://www.mltframework.org/plugins/PluginsFilters/
+                */
                 snprintf(filters_descr, sizeof(filters_descr), "rotate='%d*PI/180:ow=rotw(%d*PI/180):oh=roth(%d*PI/180)'", rotate, rotate, rotate);
                 av_log(NULL, AV_LOG_INFO, "%s filters_descr:%s\n", outfilename, filters_descr);
                 *fctx = init_filters(filters_descr, dec_ctx, dec_ctx->pix_fmt);
@@ -128,8 +142,8 @@ int gen_gif(const char* filename, const int rotate, void* data, int data_size)
     AVFrame *filt_frame = NULL; // 
     int ret = -1, video_stream_idx = -1;
     AVPacket *pkt = NULL;
-    void* mctx = NULL;
-    void* fctx = NULL;
+    void* mctx = NULL; // muxing context
+    void* fctx = NULL; // filter context
     unsigned char *indata = NULL; // avcodec 的输入的指针
     int video_stream_index = 0;
 
@@ -199,14 +213,14 @@ int gen_gif(const char* filename, const int rotate, void* data, int data_size)
 
     while (av_read_frame(fmt_ctx, pkt) >= 0) {
         if (pkt->size) {
-            // av_log(NULL, AV_LOG_DEBUG, "read frame stream index=%d", pkt->stream_index);
+            av_log(NULL, AV_LOG_INFO, "read frame stream index=%d", pkt->stream_index);
             // 不同 stream_id 的packet是交错的，在时序上，多路复用
             if(pkt->stream_index != video_stream_index){
                 av_packet_unref(pkt);
                 continue;
             }
 
-            ret = decode(&mctx, &fctx, rotate, filename, skip_step, c, frame, filt_frame, pkt);
+            ret = decode(&mctx, &fctx, rotate, filename, skip_step, c, frame, filt_frame, pkt, fmt_ctx->streams[video_stream_index]);
             av_frame_unref(frame);
             av_frame_unref(filt_frame);
             av_packet_unref(pkt);
@@ -217,8 +231,8 @@ int gen_gif(const char* filename, const int rotate, void* data, int data_size)
         }
     }
 
-    /* flush the decoder */
-    decode(&mctx, &fctx, rotate, filename, skip_step, c, frame, filt_frame, NULL);
+    // flush the decoder 不再传入packet, packet=NULL，将 fmt_ctx 中剩余的帧都处理完
+    decode(&mctx, &fctx, rotate, filename, skip_step, c, frame, filt_frame, NULL, fmt_ctx->streams[video_stream_index]);
 clean5:
     free_filters(fctx);
     ret = muxing_end(mctx, NULL, 0, NULL);
