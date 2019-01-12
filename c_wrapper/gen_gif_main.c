@@ -53,5 +53,5 @@ int main(int argc, char **argv)
     fclose(f);
 
 }
-#endif  //__CGO__
+#endif
 
