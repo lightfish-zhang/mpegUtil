@@ -48,6 +48,7 @@ int dump_info(void* data, int data_size){
 
     // find codec
     int video_stream_idx = -1, audio_stream_idx = -1;
+    AVStream *video_stream = NULL, *audio_stream = NULL;
     AVCodecContext *video_decodec_ctx=NULL, *audio_decodec_ctx=NULL;
 
     // AVFormatContext.nb_stream 记录了该 URL 中包含有几路流
@@ -68,26 +69,36 @@ int dump_info(void* data, int data_size){
 
         av_log(NULL, AV_LOG_INFO, "find codec name=%s\t%s", decodec->name, decodec->long_name);
 
+        // 分配解码器上下文句柄
         decodec_ctx = avcodec_alloc_context3(decodec);
         if(!decodec_ctx){
             av_log(NULL, AV_LOG_ERROR, "fail to allocate codec context\n");
             goto clean2;
         }
 
+        // 复制流信息到解码器上下文
         if(avcodec_parameters_to_context(decodec_ctx, codec_par) < 0){
             av_log(NULL, AV_LOG_ERROR, "fail to copy codec parameters to decoder context\n");
             avcodec_free_context(&decodec_ctx);
             goto clean2;
         }
 
+        // 初始化解码器
+        if ((ret = avcodec_open2(decodec_ctx, decodec, NULL)) < 0) {
+            av_log(NULL, AV_LOG_ERROR, "Failed to open %s codec\n", decodec->name);
+            return ret;
+        }
+
         if( stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO){
-            // 视频的属性，帧率
+            // 视频的属性，帧率，这里 av_guess_frame_rate() 非必须，看业务是否需要使用帧率参数
             decodec_ctx->framerate = av_guess_frame_rate(fmt_ctx, stream, NULL);
             av_log(NULL, AV_LOG_INFO, "video framerate=%d/%d", decodec_ctx->framerate.num, decodec_ctx->framerate.den);
             video_stream_idx = i;
+            video_stream = stream;
             video_decodec_ctx = decodec_ctx;
         } else if( stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO){
             audio_stream_idx = i;
+            audio_stream = stream;
             audio_decodec_ctx = decodec_ctx;
         } 
     }
@@ -115,7 +126,11 @@ int dump_info(void* data, int data_size){
 
     while (av_read_frame(fmt_ctx, pkt) >= 0) {
         if(pkt->size){
-            av_log(NULL, AV_LOG_INFO, "pkt->size=%d", pkt->size);
+            /*
+            demux 解复用
+            原始流的数据中，不同格式的流会交错在一起（多路复用）
+            从原始流中读取的每一个 packet 的流可能是不一样的，需要判断 packet 的流索引，按类型处理
+            */
             if(pkt->stream_index == video_stream_idx){
                 // 向解码器发送原始压缩数据 packet
                 if((ret = avcodec_send_packet(video_decodec_ctx, pkt)) < 0){
@@ -133,7 +148,16 @@ int dump_info(void* data, int data_size){
                     av_frame_unref(frame);
                     continue;
                 }
-                av_log(NULL, AV_LOG_INFO, "read video frame num=%d", video_decodec_ctx->frame_number);
+
+                /* 
+                打印出视频的时间
+                视频流有基准时间 time_base ，即每 1 pts 的时间间隔(单位秒)
+                 */
+                if(video_decodec_ctx->frame_number%100 == 0){
+                    av_log(NULL, AV_LOG_INFO, "read video No.%d frame, pts=%d, timestamp=%f seconds", 
+                        video_decodec_ctx->frame_number, frame->pts, frame->pts * av_q2d(video_stream->time_base));
+                }
+
             }else if(pkt->stream_index == audio_stream_idx){
 
             }
