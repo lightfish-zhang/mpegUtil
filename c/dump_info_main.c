@@ -12,7 +12,7 @@
 
 void Ffmpeglog(int l, char* t) {
     if(l <= AV_LOG_INFO)
-        fprintf(stderr, "%s\n", t);
+        fprintf(stdout, "%s\n", t);
 }
 
 int main(int argc, char **argv)

@@ -353,6 +353,8 @@ void* muxing_begin(const char* formatname, const char* filename, const int dst_f
     else if (NULL != formatname) {
         if (strcmp(formatname, "jpg") == 0 || strcmp(formatname, "png") == 0) {
             avformat_alloc_output_context2(&mctx->oc, NULL, "image2", NULL);
+        }else{
+            avformat_alloc_output_context2(&mctx->oc, NULL, formatname, NULL);
         }
     }
     if (!mctx->oc) {
