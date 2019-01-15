@@ -11,9 +11,8 @@
 #define INBUF_SIZE (10<<20)
 
 void Ffmpeglog(int l, char* t) {
-    if (l <= 32) {
+    if(l <= AV_LOG_INFO)
         fprintf(stderr, "%s\n", t);
-    }
 }
 
 int main(int argc, char **argv)

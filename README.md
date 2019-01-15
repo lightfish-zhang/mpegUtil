@@ -16,6 +16,55 @@
 
 本文是音视频编程入门篇，先略过传输协议层，主要讲格式层与编解码层的编程例子。
 
+### 写在最前面的日志处理
+
+边编程边执行，查看日志输出，是最直接的反馈，以感受学习的进度。对于 ffmpeg 的日志，需要提前这样处理：
+
+```c
+/* log.c */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <libavutil/log.h>
+
+// 定义输出日志的函数，留白给使用者实现
+extern void Ffmpeglog(int , char*);
+
+static void log_callback(void *avcl, int level, const char *fmt, va_list vl) 
+{
+    (void) avcl;
+    char log[1024] = {0};
+    int n = vsnprintf(log, 1024, fmt, vl);
+    if (n > 0 && log[n - 1] == '\n')
+        log[n - 1] = 0;
+    if (strlen(log) == 0)
+        return;
+    Ffmpeglog(level, log);
+}
+
+void set_log_callback()
+{
+    // 给 av 解码器注册日志回调函数
+    av_log_set_callback(log_callback);
+}
+```
+
+```c
+/* main.c */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+void Ffmpeglog(int l, char* t) {
+    if(l <= AV_LOG_INFO)
+        fprintf(stderr, "%s\n", t);
+}
+```
+
+ffmpeg 有不同等级的日志，本文只需使用 `AV_LOG_INFO`  即可。
+
+
 ### 第一步，查看音视频格式信息
 
 料理食材的第一步，得先懂得食材的来源和特性。
