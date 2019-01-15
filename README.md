@@ -373,8 +373,8 @@ end:
 
 我提供两个小例子在 github 上
 
-- [转码GIF](https://github.com/lightfish-zhang/mpegUtil/blob/master/c_wrapper/gen_gif.c)
-- [生成缩略图](https://github.com/lightfish-zhang/mpegUtil/blob/master/c_wrapper/gen_thumbnail.c)
+- [转码GIF](https://github.com/lightfish-zhang/mpegUtil/blob/master/c/gen_gif.c)
+- [生成缩略图](https://github.com/lightfish-zhang/mpegUtil/blob/master/c/gen_thumbnail.c)
 
 
 请安装好 linux 下 ffmepg 环境，找到例子代码里的 Ｍakefile 文件编译，例如：
