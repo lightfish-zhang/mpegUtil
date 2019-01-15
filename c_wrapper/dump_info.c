@@ -61,6 +61,7 @@ int dump_info(void* data, int data_size){
         av_log(NULL, AV_LOG_INFO, "find audio stream index=%d, type=%s, codec id=%d", 
                 i, av_get_media_type_string(codec_par->codec_type), codec_par->codec_id);
 
+        // 获得解码器
         decodec = avcodec_find_decoder(codec_par->codec_id);
         if(!decodec){
             av_log(NULL, AV_LOG_ERROR, "fail to find decodec\n");
@@ -110,7 +111,7 @@ int dump_info(void* data, int data_size){
     AVPacket *pkt;
     AVFrame *frame;
 
-    // 读取流的缓存
+    // 分配原始文件流packet的缓存
     pkt = av_packet_alloc();
     if (!pkt){
         av_log(NULL, AV_LOG_ERROR, "Could not allocate video frame\n");
@@ -141,23 +142,39 @@ int dump_info(void* data, int data_size){
                 解码输出视频帧
                 avcodec_receive_frame()返回 EAGAIN 表示需要更多帧来参与编码
                 像 MPEG等格式, P帧(预测帧)需要依赖I帧(关键帧)或者前面的P帧，使用比较或者差分方式编码
+                读取frame需要循环，因为读取多个packet后，可能获得多个frame
                 */ 
-                ret = avcodec_receive_frame(video_decodec_ctx, frame);
-                if(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF){
-                    av_packet_unref(pkt);
+                while(ret >= 0){
+                    ret = avcodec_receive_frame(video_decodec_ctx, frame);
+                    if(ret == AVERROR(EAGAIN) || ret == AVERROR_EOF){
+                        break;
+                    }
+
+                    /* 
+                    DEBUG 打印出视频的时间
+                    pts = display timestamp
+                    视频流有基准时间 time_base ，即每 1 pts 的时间间隔(单位秒)
+                    使用 pts * av_q2d(time_base) 可知当前帧的显示时间
+                    */
+                    if(video_decodec_ctx->frame_number%100 == 0){
+                        av_log(NULL, AV_LOG_INFO, "read video No.%d frame, pts=%d, timestamp=%f seconds", 
+                            video_decodec_ctx->frame_number, frame->pts, frame->pts * av_q2d(video_stream->time_base));
+                    }
+
+                    /*
+                    在第一个视频帧读取成功时，可以进行：
+                    １、若要转码，初始化相应的编码器
+                    ２、若要加过滤器，比如水印、旋转等，这里初始化 filter
+                    */
+                    if (video_decodec_ctx->frame_number == 1) {
+
+                    }else{
+
+                    }
+
+
                     av_frame_unref(frame);
-                    continue;
                 }
-
-                /* 
-                打印出视频的时间
-                视频流有基准时间 time_base ，即每 1 pts 的时间间隔(单位秒)
-                 */
-                if(video_decodec_ctx->frame_number%100 == 0){
-                    av_log(NULL, AV_LOG_INFO, "read video No.%d frame, pts=%d, timestamp=%f seconds", 
-                        video_decodec_ctx->frame_number, frame->pts, frame->pts * av_q2d(video_stream->time_base));
-                }
-
             }else if(pkt->stream_index == audio_stream_idx){
 
             }
@@ -168,7 +185,7 @@ int dump_info(void* data, int data_size){
     }
     /* end 解码过程 */
 
-    // flush data
+    // send NULL packet, flush data
     avcodec_send_packet(video_decodec_ctx, NULL);
     avcodec_send_packet(audio_decodec_ctx, NULL);
 
