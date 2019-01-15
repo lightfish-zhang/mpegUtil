@@ -9,7 +9,7 @@
 #include "log.h"
 
 #define INBUF_SIZE (10<<20)
-#define OUTBUF_SIZE (10<<20)
+#define OUTBUF_SIZE (1<<20)
 
 void Ffmpeglog(int l, char* t) {
     if (l <= 32) {
@@ -50,7 +50,7 @@ int main(int argc, char **argv)
     if (!data_size)
         exit(1);
 
-    gen_gif(45, data, data_size, outData, OUTBUF_SIZE, &outSize);
+    gen_gif(5, 45, data, data_size, outData, OUTBUF_SIZE, &outSize);
 
     outfile = fopen(outfilename, "wb");
     if (!outfile) {

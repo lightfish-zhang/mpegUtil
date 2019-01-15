@@ -10,7 +10,7 @@
 
 static const int k_gif_framerate = 5; // 默认 gif 的帧率为 5，即每秒 5 帧
 
-static int decode(void** mctx, void** fctx, const int rotate, 
+static int decode(void** mctx, void** fctx, const int gifSeconds, const int rotate, 
                     const char* outFormat, const int skip_step, AVCodecContext *dec_ctx, 
                     AVFrame *frame, AVFrame *filt_frame, AVPacket *pkt, AVStream *st)
 {
@@ -38,11 +38,11 @@ static int decode(void** mctx, void** fctx, const int rotate,
             //av_log(NULL, AV_LOG_ERROR, "Error during decoding, outfilename:%s, ret:%d\n", outFormat, ret);
             break;
         }
-        
-        // PTS（显示时间戳）, 计算一帧在整个视频的时间位置：timestamp(秒) = pts * av_q2d(st->time_base)
-        frame->pts = dec_ctx->frame_number;
-        // av_log(NULL, AV_LOG_INFO, "[decode] frame_number=%d, timestamp=%f", 
-        //         dec_ctx->frame_number, frame->pts * av_q2d(st->time_base));
+
+        if((frame->pts * av_q2d(st->time_base)) > gifSeconds){
+            ret = AVERROR_EOF;
+            break;
+        }
 
         if (dec_ctx->frame_number == 1) {
             if (rotate != 0) {
@@ -134,7 +134,7 @@ static int open_codec_context(AVCodecContext **dec_ctx, int *stream_index, AVFor
     return 0;
 }
 
-int gen_gif(const int rotate, void* data, int data_size, void* outBuf, int outBufLen, int *outSize)
+int gen_gif(const int gifSeconds, const int rotate, void* data, int data_size, void* outBuf, int outBufLen, int *outSize)
 {
     const AVCodec *codec = NULL; // AV 解码器指针
     AVFormatContext *fmt_ctx = NULL; // AV 格式上下文
@@ -222,7 +222,7 @@ int gen_gif(const int rotate, void* data, int data_size, void* outBuf, int outBu
                 continue;
             }
 
-            ret = decode(&mctx, &fctx, rotate, outFormat, skip_step, c, frame, filt_frame, pkt, fmt_ctx->streams[video_stream_index]);
+            ret = decode(&mctx, &fctx, gifSeconds, rotate, outFormat, skip_step, c, frame, filt_frame, pkt, fmt_ctx->streams[video_stream_index]);
             av_frame_unref(frame);
             av_frame_unref(filt_frame);
             av_packet_unref(pkt);
@@ -234,7 +234,7 @@ int gen_gif(const int rotate, void* data, int data_size, void* outBuf, int outBu
     }
 
     // flush the decoder 不再传入packet, packet=NULL，将 fmt_ctx 中剩余的帧都处理完
-    decode(&mctx, &fctx, rotate, outFormat, skip_step, c, frame, filt_frame, NULL, fmt_ctx->streams[video_stream_index]);
+    decode(&mctx, &fctx, gifSeconds, rotate, outFormat, skip_step, c, frame, filt_frame, NULL, fmt_ctx->streams[video_stream_index]);
 clean5:
     free_filters(fctx);
     ret = muxing_end(mctx, outBuf, outBufLen, outSize);

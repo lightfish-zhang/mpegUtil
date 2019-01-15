@@ -2,7 +2,7 @@
 extern "C" {
 #endif
 
-int gen_gif(const int rotate, void* data, int data_size, void* outBuf, int outBufLen, int *outSize);
+int gen_gif(const int gifSeconds, const int rotate, void* data, int data_size, void* outBuf, int outBufLen, int *outSize);
 
 
 #ifdef __cplusplus
