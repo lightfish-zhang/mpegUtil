@@ -18,10 +18,20 @@ func init() {
 	C.set_log_callback()
 }
 
+var logger func(s string) = nil
+
+func SetFfmpegLogger(f func(s string)) {
+	logger = f
+}
+
 //export Ffmpeglog
 func Ffmpeglog(l C.int, t *C.char) {
 	if l <= 32 {
-		fmt.Printf("ffmpeg log:%s\n", C.GoString(t))
+		if logger == nil {
+			fmt.Printf("ffmpeg log:%s\n", C.GoString(t))
+		} else {
+			logger(fmt.Sprintf("ffmpeg log:%s\n", C.GoString(t)))
+		}
 	}
 }
 
