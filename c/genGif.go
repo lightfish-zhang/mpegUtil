@@ -36,11 +36,13 @@ func Ffmpeglog(l C.int, t *C.char) {
 }
 
 func GenGif(second, rotate int, input []byte) (err error, output []byte) {
-	output = make([]byte, 1<<20)
+	buf := make([]byte, 1<<20)
 	var outsz C.int
-	ret := C.gen_gif(C.int(second), C.int(rotate), unsafe.Pointer(&input[0]), C.int(len(input)), unsafe.Pointer(&output[0]), C.int(len(output)), &outsz)
+	ret := C.gen_gif(C.int(second), C.int(rotate), unsafe.Pointer(&input[0]), C.int(len(input)), unsafe.Pointer(&buf[0]), C.int(len(buf)), &outsz)
 	if ret != 0 {
 		return errors.New(fmt.Sprintf("error, ret=%v", ret)), nil
 	}
+	output = make([]byte, outsz)
+	copy(output, buf[:outsz])
 	return nil, output
 }
