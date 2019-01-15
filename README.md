@@ -335,9 +335,36 @@ ffmepg 中，解码工具需要初始化好两个指针，一个是解码器，�
         }
 
         av_packet_unref(pkt);
-        av_frame_unref(frame);
+        av_frame_unref(frame);　
     }
 ```
+
+#### 回收内存
+
+上文的代码中，多次出现 goto 语句，我认为适当的使用 goto 使编程更加方便，比如执行过程结束的清理工作，以下是回收 ffmpeg AV 库产生的各种变量的内存，C/C++语言编程都需要多注意这一点。
+
+```c
+clean5:
+    av_frame_free(&frame);
+    //av_parser_close(parser);
+clean4:
+    av_packet_free(&pkt);
+clean3:
+    if(NULL != video_decodec_ctx)
+        avcodec_free_context(&video_decodec_ctx);
+    if(NULL != audio_decodec_ctx)
+        avcodec_free_context(&audio_decodec_ctx);
+clean2:
+    av_freep(&fmt_ctx->pb->buffer);
+    av_freep(&fmt_ctx->pb);
+clean1:
+    avformat_close_input(&fmt_ctx);
+end:
+    return ret;
+```
+
+
+#### 自由发挥
 
 看到了这里，可以说入门 ffmpeg 编程了，什么，你问后面的转码怎么做？笔者就留白了，本文已经介绍了最基本的解码过程了，编码也就是逆向过程，我建议阅读 ffmepg 官方源码的example，以及多了解音视频各种格式的知识。
 
@@ -359,9 +386,7 @@ make -f Makefile_test_dump_info
 以后我会将这两个小例子修改，实现跨语言调用，如 nodejs addon 或 golang cgo
 
 
-## 参考文章
+## Reference
 
 [ffmpeg example](https://github.com/FFmpeg/FFmpeg/tree/master/doc/examples) (本文代码就是从example改过来的)
-
-[雷霄骅的博客](https://blog.csdn.net/leixiaohua1020) (致敬英才)
 
